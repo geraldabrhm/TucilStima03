@@ -1,21 +1,12 @@
 import numpy as np
-from pythonlangutil.overload import Overload, signature
-from multipledispatch import dispatch
+from extended_int import int_inf
+import time
 
 class Puzzle:
-    # Attribute
-    # Method
-    
-    # def __init__(self, matrix):
-    #     self.matrix = np.array(matrix)
-
-    # def __init__(self, seedInput):
-    #     np.random.seed(seedInput)
-    #     self.matrix = np.random.choice(range(1,17), size=16, replace=False).reshape((4,4))
-
-    def __init__ (self, data, lenRoot): # lenRoot = 0 (?), cek lagi nanti
+    def __init__ (self, data, lenRoot, dirGenerated = None): # lenRoot = 0 (?), cek lagi nanti
         self.lenRoot = lenRoot
         self.matrix = data
+        self.dirGenerated = dirGenerated
     
     @classmethod
     def fromMatrix(cls, array, lenRoot):
@@ -30,10 +21,6 @@ class Puzzle:
     @classmethod
     def dummyPuzzle(cls, lenRoot):
         return cls(np.empty([4,4]), lenRoot)
-
-    # @classmethod
-    # def producePuzzle(cls):
-    #     return cls.dummyPuzzle()
 
     def getElmt(self, idxRow, idxCol):
         return self.matrix[idxRow][idxCol]
@@ -52,9 +39,9 @@ class Puzzle:
         count = 0
         oneDimMatrix = self.matrix.reshape(16)
         for i in range(16):
-            if (oneDimMatrix[i] != (i + 1)) and (oneDimMatrix[i] != 16):
+            if oneDimMatrix[i] != (i + 1):
                 count += 1
-        return count
+        return count - 1
 
 
     def getPosition16(self):
@@ -72,41 +59,30 @@ class Puzzle:
             return True
         return False
 
-    def isValidDirection(self, direction):
-        if direction == "up": # syntax error when trying to use match-case
-            if self.getPosition16()[0] != 0:
-                return True
-        elif direction == "down":
-            if self.getPosition16()[0] != 3:
-                return True
-        elif direction == "right":
-            if self.getPosition16()[1] != 3:
-                return True
-        elif direction == "left":
-            if self.getPosition16()[1] != 0:
-                return True
-        return False
-
     def moveEmptyBox(self, direction):
         i, j = self.getPosition16()
         tempMatrix = np.copy(self.matrix)
-        if direction == "up" and self.isValidDirection("up"):
+        if direction == "up" and i != 0:
             temp = tempMatrix[i - 1][j]
             tempMatrix[i][j] = temp
             tempMatrix[i - 1][j] = 16
-        elif direction == "down" and self.isValidDirection("down"):
+            return tempMatrix, True
+        elif direction == "down" and i != 3:
             temp = tempMatrix[i + 1][j]
             tempMatrix[i][j] = temp
             tempMatrix[i + 1][j] = 16
-        elif direction == "right" and self.isValidDirection("right"):
+            return tempMatrix, True
+        elif direction == "right" and j != 3:
             temp = tempMatrix[i][j + 1]
             tempMatrix[i][j] = temp
             tempMatrix[i][j + 1] = 16
-        elif direction == "left" and self.isValidDirection("left"):
+            return tempMatrix, True
+        elif direction == "left" and j != 0:
             temp = tempMatrix[i][j - 1]
             tempMatrix[i][j] = temp
             tempMatrix[i][j - 1] = 16
-        return tempMatrix, self.isValidDirection(direction)
+            return tempMatrix, True
+        return tempMatrix, False
         
     def isTarget(self):
         oneDimMatrix = self.matrix.reshape(16)
@@ -116,27 +92,101 @@ class Puzzle:
         return True
 
     def getChild(self):
-        dummyPuzzle = Puzzle.dummyPuzzle(self.lenRoot + 1)
         directions = ["up", "down", "right", "left"]
+        if self.dirGenerated == "up":
+            directions.remove("down")
+        elif self.dirGenerated == "down":
+            directions.remove("up")
+        elif self.dirGenerated == "right":
+            directions.remove("left")
+        elif self.dirGenerated == "left":
+            directions.remove("right")
+            
         list = []
         for direction in directions:
-            if(self.moveEmptyBox(direction)[1]):
-                dummyPuzzle.matrix = self.moveEmptyBox(direction)[0]
+            val1, val2 = self.moveEmptyBox(direction)
+            if(val2):
+                dummyPuzzle = Puzzle.dummyPuzzle(self.lenRoot + 1)
+                dummyPuzzle.matrix = val1
+                dummyPuzzle.dirGenerated = direction
                 list.append(dummyPuzzle)
-        return list
+        return list 
 
-puzzle = Puzzle.fromSeed(4, 0)
-# puzzle_ = Puzzle.producePuzzle()
-# print(puzzle_.matrix)
+    def getCost(self):
+        return self.lenRoot + self.countImproper()
 
-puzzleChild = puzzle.getChild()
-print(puzzle.matrix)
-# print("===========")
-for child in puzzleChild:
-    print(f"{child.matrix}")
-    print(f"{child.lenRoot}\n")
-print("===============")
-puzzleGrandChild = puzzleChild[0].getChild()
-for child in puzzleGrandChild:
-    print(f"{child.matrix}")
-    print(f"{child.lenRoot}\n")
+    def sortNodes(self, nodes):
+        sortedNodes = sorted(nodes, key=lambda x: x.getCost())
+        return sortedNodes
+i = 0
+def generateTree(puzzle, simpulHidup, haveGenerated):
+    # !
+    # time.sleep(1)
+    # global i
+    # print(f"Iterasi ke {i}, banyak simpulHidup: {len(simpulHidup)}")
+    # for simpul in simpulHidup:
+    #     print(simpul.matrix)
+    # i += 1
+    # print("\n")
+    # ! 
+    simpulHidup.append(puzzle)
+    haveGenerated.append(puzzle)
+
+    if puzzle.isTarget() == False:
+        childNode = simpulHidup[0].getChild()
+        for child in childNode:
+            if child not in haveGenerated:
+                simpulHidup.append(child)
+                haveGenerated.append(child)
+        del simpulHidup[0]
+        simpulHidup = puzzle.sortNodes(simpulHidup)
+        temp = simpulHidup[0]
+        if temp.isTarget():
+            pass
+        else:
+            simpulHidup.append(generateTree(simpulHidup[0], simpulHidup, haveGenerated)[0])
+    return simpulHidup, haveGenerated
+
+def makeUnique(ls):
+    if(len(ls) != 0):
+        flat_list = []
+        for sublist in ls:
+            if type(sublist) == list:
+                for item in sublist:
+                    if type(item) == list:
+                        temp = makeUnique(item)
+                        for tem in temp:
+                            if tem not in flat_list:
+                                flat_list.append(tem)
+                    else: 
+                        if item not in flat_list:
+                            flat_list.append(item)
+            else:
+                if sublist not in flat_list:
+                    flat_list.append(sublist)
+        return flat_list
+    return ls
+
+def getMaxLenRoot(tree):
+    max = tree[0].lenRoot
+    for elmt in tree:
+        if elmt.lenRoot > max:
+            max = elmt.lenRoot
+    return max
+
+def getSolution(tree):
+    solution = {}
+    valSolution = {}
+    for i in range(getMaxLenRoot(tree)):
+        valSolution[i] = int_inf
+    for i in range(getMaxLenRoot(tree)):
+        for elmt in tree:
+            if elmt.lenRoot == i and elmt.getCost() < valSolution[i]:
+                solution[i] = elmt
+                valSolution[i] = elmt.getCost()
+    return solution
+            
+def showSolution(solution):
+    for i in range(len(solution)):
+        print(f"Move: {i + 1}")
+        print(f"{solution[i].matrix}\n")
