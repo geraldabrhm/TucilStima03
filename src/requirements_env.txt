@@ -1,1 +1,2 @@
 numpy
+extended_int
