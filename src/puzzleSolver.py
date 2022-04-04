@@ -1,6 +1,5 @@
 import numpy as np
 from extended_int import int_inf
-# import time
 
 class Puzzle:
     def __init__ (self, data, lenRoot, dirGenerated = None): # lenRoot = 0 (?), cek lagi nanti
